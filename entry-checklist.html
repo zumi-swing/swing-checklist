@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI×スイングトレード｜エントリータイミング判定</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e2d45;
+    --accent: #00d4ff;
+    --accent2: #00ff88;
+    --warn: #ff6b35;
+    --danger: #ff3366;
+    --text: #e8f0fe;
+    --text-muted: #6b7fa3;
+    --gold: #ffd700;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* 背景グリッド */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ヘッダー */
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+    animation: fadeDown 0.6s ease both;
+  }
+
+  .header .badge {
+    display: inline-block;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 6px 16px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+  }
+
+  .header h1 {
+    font-size: clamp(22px, 5vw, 32px);
+    font-weight: 900;
+    line-height: 1.3;
+    margin-bottom: 12px;
+    background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header p {
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  /* スコアボード */
+  .scoreboard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
+    padding: 28px;
+    margin-bottom: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    animation: fadeDown 0.6s 0.1s ease both;
+  }
+
+  .score-main {
+    text-align: center;
+  }
+
+  .score-number {
+    font-family: 'Space Mono', monospace;
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+    transition: all 0.4s ease;
+  }
+
+  .score-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 1px;
+  }
+
+  .score-divider {
+    width: 1px;
+    height: 60px;
+    background: var(--border);
+  }
+
+  .verdict-box {
+    flex: 1;
+    text-align: center;
+  }
+
+  .verdict {
+    font-size: 18px;
+    font-weight: 700;
+    padding: 10px 20px;
+    border-radius: 2px;
+    transition: all 0.4s ease;
+    display: inline-block;
+  }
+
+  .verdict.wait    { background: rgba(107,127,163,0.15); color: var(--text-muted); border: 1px solid var(--text-muted); }
+  .verdict.caution { background: rgba(255,107,53,0.15);  color: var(--warn);       border: 1px solid var(--warn); }
+  .verdict.go      { background: rgba(0,255,136,0.15);   color: var(--accent2);    border: 1px solid var(--accent2); }
+  .verdict.strong  { background: rgba(255,215,0,0.15);   color: var(--gold);       border: 1px solid var(--gold); }
+
+  .verdict-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  /* プログレスバー */
+  .progress-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 16px 28px;
+    margin-bottom: 32px;
+    animation: fadeDown 0.6s 0.15s ease both;
+  }
+
+  .progress-track {
+    height: 6px;
+    background: var(--border);
+    border-radius: 0;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    width: 0%;
+    transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .progress-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+  }
+
+  /* カテゴリセクション */
+  .category {
+    margin-bottom: 24px;
+    animation: fadeUp 0.5s ease both;
+  }
+
+  .category-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    background: var(--surface2);
+    border-left: 3px solid var(--accent);
+    margin-bottom: 2px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .category-header:hover { background: #1f2e47; }
+
+  .category-icon {
+    font-size: 18px;
+    width: 28px;
+    text-align: center;
+  }
+
+  .category-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    flex: 1;
+  }
+
+  .category-count {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* チェック項目 */
+  .check-list {
+    border: 1px solid var(--border);
+    border-top: none;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+  }
+
+  .check-item:last-child { border-bottom: none; }
+  .check-item:hover { background: rgba(0,212,255,0.04); }
+
+  .check-item.checked { background: rgba(0,255,136,0.05); }
+
+  .checkbox {
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    margin-top: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 13px;
+  }
+
+  .check-item.checked .checkbox {
+    background: var(--accent2);
+    border-color: var(--accent2);
+    color: #0a0e1a;
+  }
+
+  .check-item.important .checkbox {
+    border-color: var(--gold);
+  }
+  .check-item.important.checked .checkbox {
+    background: var(--gold);
+    border-color: var(--gold);
+  }
+
+  .check-content { flex: 1; }
+
+  .check-title {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.5;
+    margin-bottom: 4px;
+  }
+
+  .check-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .check-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  .tag-must {
+    background: rgba(255,215,0,0.15);
+    color: var(--gold);
+    border: 1px solid rgba(255,215,0,0.3);
+  }
+
+  .tag-ai {
+    background: rgba(0,212,255,0.12);
+    color: var(--accent);
+    border: 1px solid rgba(0,212,255,0.3);
+  }
+
+  /* リセットボタン */
+  .action-area {
+    display: flex;
+    gap: 12px;
+    margin-top: 32px;
+    animation: fadeUp 0.5s 0.3s ease both;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 16px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+
+  .btn-reset {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .btn-reset:hover {
+    border-color: var(--text-muted);
+    color: var(--text);
+  }
+
+  .btn-copy {
+    background: var(--accent);
+    color: #0a0e1a;
+  }
+
+  .btn-copy:hover {
+    background: #33ddff;
+    transform: translateY(-1px);
+  }
+
+  /* フッター */
+  .footer {
+    text-align: center;
+    margin-top: 48px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+    animation: fadeUp 0.5s 0.4s ease both;
+  }
+
+  .footer p {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.8;
+  }
+
+  .footer .author {
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  /* トースト */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    background: var(--accent2);
+    color: #0a0e1a;
+    padding: 12px 24px;
+    font-size: 13px;
+    font-weight: 700;
+    z-index: 100;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s ease;
+  }
+
+  .toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  /* アニメーション */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .pulse {
+    animation: pulse 0.4s ease;
+  }
+
+  @keyframes pulse {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- ヘッダー -->
+  <div class="header">
+    <div class="badge">AI × Swing Trade</div>
+    <h1>エントリータイミング<br>判定チェックリスト</h1>
+    <p>全項目をチェックしてエントリーの可否を判定しましょう。<br>
+    <span style="color:var(--gold)">★MUST</span> 項目は必須確認。<span style="color:var(--accent)">AI</span> 項目はAIに聞くと精度UP。</p>
+  </div>
+
+  <!-- スコアボード -->
+  <div class="scoreboard">
+    <div class="score-main">
+      <div class="score-number" id="scoreNum">0</div>
+      <div class="score-label">/ <span id="totalNum">0</span> POINTS</div>
+    </div>
+    <div class="score-divider"></div>
+    <div class="verdict-box">
+      <div class="verdict wait" id="verdictBox">— 判定待ち —</div>
+      <div class="verdict-desc" id="verdictDesc">チェックを入れると判定が更新されます</div>
+    </div>
+  </div>
+
+  <!-- プログレス -->
+  <div class="progress-wrap">
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-text">CHECKLIST PROGRESS: <span id="progressText">0 / 0</span></div>
+  </div>
+
+  <!-- チェックリスト本体 -->
+  <div id="checklistArea"></div>
+
+  <!-- アクション -->
+  <div class="action-area">
+    <button class="btn btn-reset" onclick="resetAll()">🔄 リセット</button>
+    <button class="btn btn-copy" onclick="copyResult()">📋 結果をコピー</button>
+  </div>
+
+  <!-- フッター -->
+  <div class="footer">
+    <p>
+      <span class="author">ずみ（@shota_dxfactory）</span> 作成<br>
+      AI×スイングトレードで累計利益700万円超の個人投資家<br>
+      ※このツールは投資判断の補助ツールです。最終的な投資判断はご自身でお願いします。
+    </p>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CATEGORIES = [
+  {
+    id: 'trend',
+    icon: '📈',
+    title: 'トレンド確認',
+    color: '#00d4ff',
+    items: [
+      {
+        id: 't1',
+        title: '週足・日足でトレンドの方向が一致している',
+        desc: '上位足（週足）と下位足（日足）が同じ方向を向いていること。逆行は避ける。',
+        important: true,
+        tag: 'must'
+      },
+      {
+        id: 't2',
+        title: '直近の高値・安値が切り上がっている（上昇トレンド）',
+        desc: '高値と安値が両方切り上がっていれば上昇トレンド継続のサイン。',
+        important: true,
+        tag: 'must'
+      },
+      {
+        id: 't3',
+        title: '移動平均線（25MA・75MA）が上向きで並んでいる',
+        desc: '短期MAが長期MAの上にあり、どちらも上向きなら強い上昇トレンドの確認。',
+        important: false,
+        tag: null
+      },
+      {
+        id: 't4',
+        title: 'AIにトレンドの強さを分析させた',
+        desc: 'ChatGPTやClaudeに「この銘柄のトレンド強度を分析して」と聞いてみよう。',
+        important: false,
+        tag: 'ai'
+      },
+    ]
+  },
+  {
+    id: 'entry',
+    icon: '🎯',
+    title: 'エントリーポイント',
+    color: '#00ff88',
+    items: [
+      {
+        id: 'e1',
+        title: '押し目・もみ合いからのブレイクアウトを確認',
+        desc: '一度下落した後の反発、またはレンジ上限のブレイクアウトを狙う。',
+        important: true,
+        tag: 'must'
+      },
+      {
+        id: 'e2',
+        title: '出来高が直近平均より増加している',
+        desc: '価格上昇時に出来高が伴っていれば、本物の需要が入っている証拠。',
+        important: true,
+        tag: 'must'
+      },
+      {
+        id: 'e3',
+        title: 'サポートライン付近でのエントリーになっている',
+        desc: 'サポートに近いほどリスクが小さく、損切りラインが設定しやすい。',
+        important: false,
+        tag: null
+      },
+      {
+        id: 'e4',
+        title: 'AIで直近の値動きパターンを分析した',
+        desc: '「直近20日の値動きを見て、エントリーポイントを提案して」とAIに依頼。',
+        important: false,
+        tag: 'ai'
+      },
+    ]
+  },
+  {
+    id: 'indicator',
+    icon: '📊',
+    title: 'テクニカル指標',
+    color: '#ffd700',
+    items: [
+      {
+        id: 'i1',
+        title: 'RSI（14）が30〜70の範囲内にある',
+        desc: '30以下は売られすぎ、70以上は買われすぎ。中間帯でのエントリーが安全。',
+        important: false,
+        tag: null
+      },
+      {
+        id: 'i2',
+        title: 'MACDがゴールデンクロス、またはゼロライン上にある',
+        desc: 'MACDラインがシグナルラインを上抜けるゴールデンクロスは買いサイン。',
+        important: false,
+        tag: null
+      },
+      {
+        id: 'i3',
+        title: 'ボリンジャーバンドの収縮後の拡大が確認できる',
+        desc: 'バンドが縮んだ後に広がり始めたら大きな値動きの始まりの可能性あり。',
+        important: false,
+        tag: null
+      },
+      {
+        id: 'i4',
+        title: 'AIに複数指標を総合評価してもらった',
+        desc: '「RSI・MACD・ボリンジャーバンドを総合して買いサインか判断して」とAIに聞こう。',
+        important: false,
+        tag: 'ai'
+      },
+    ]
+  },
+  {
+    id: 'risk',
+    icon: '🛡️',
+    title: 'リスク管理',
+    color: '#ff6b35',
+    items: [
+      {
+        id: 'r1',
+        title: '損切りラインを事前に決めている',
+        desc: '「どこまで下がったら諦めるか」を買う前に必ず決める。これが最重要。',
+        important: true,
+        tag: 'must'
+      },
+      {
+        id: 'r2',
+        title: 'リスクリワード比が1:2以上になっている',
+        desc: '損失1に対して利益2以上が見込めるトレードのみエントリー。',
+        important: true,
+        tag: 'must'
+      },
+      {
+        id: 'r3',
+        title: '1トレードのリスクが総資産の2%以内に収まっている',
+        desc: '1回の損失が資産の2%以内なら、50回連続で負けても生き残れる。',
+        important: true,
+        tag: 'must'
+      },
+      {
+        id: 'r4',
+        title: 'AIにリスクリワード計算をしてもらった',
+        desc: '「エントリー○円、損切り○円、目標○円でリスクリワードを計算して」と依頼しよう。',
+        important: false,
+        tag: 'ai'
+      },
+    ]
+  },
+  {
+    id: 'market',
+    icon: '🌍',
+    title: '市場環境・外部要因',
+    color: '#b388ff',
+    items: [
+      {
+        id: 'm1',
+        title: '日経平均・S&P500など主要指数が下落トレンドでない',
+        desc: '全体相場が下落しているときは個別銘柄も引きずられやすい。',
+        important: true,
+        tag: 'must'
+      },
+      {
+        id: 'm2',
+        title: '決算発表・重要イベントが直近にない',
+        desc: '決算またぎは予測困難なギャップリスクがある。初心者は避けるのが無難。',
+        important: false,
+        tag: null
+      },
+      {
+        id: 'm3',
+        title: '当該銘柄のセクターに悪材料がない',
+        desc: 'セクター全体への逆風は個別銘柄も直撃する。ニュースを事前確認しよう。',
+        important: false,
+        tag: null
+      },
+      {
+        id: 'm4',
+        title: 'AIで市場センチメントを確認した',
+        desc: '「現在の日本株市場のセンチメントとリスク要因を教えて」とAIに聞いてみよう。',
+        important: false,
+        tag: 'ai'
+      },
+    ]
+  }
+];
+
+// 状態管理
+const state = {};
+CATEGORIES.forEach(cat => cat.items.forEach(item => state[item.id] = false));
+
+// 描画
+function render() {
+  const area = document.getElementById('checklistArea');
+  area.innerHTML = '';
+
+  CATEGORIES.forEach((cat, ci) => {
+    const sec = document.createElement('div');
+    sec.className = 'category';
+    sec.style.animationDelay = `${0.1 + ci * 0.07}s`;
+
+    const checked = cat.items.filter(i => state[i.id]).length;
+
+    sec.innerHTML = `
+      <div class="category-header" style="border-left-color:${cat.color}">
+        <div class="category-icon">${cat.icon}</div>
+        <div class="category-title">${cat.title}</div>
+        <div class="category-count">${checked}/${cat.items.length}</div>
+      </div>
+      <div class="check-list">
+        ${cat.items.map(item => `
+          <div class="check-item ${state[item.id] ? 'checked' : ''} ${item.important ? 'important' : ''}"
+               onclick="toggle('${item.id}')" data-id="${item.id}">
+            <div class="checkbox">${state[item.id] ? '✓' : ''}</div>
+            <div class="check-content">
+              <div class="check-title">
+                ${item.title}
+                ${item.tag === 'must' ? '<span class="check-tag tag-must">★MUST</span>' : ''}
+                ${item.tag === 'ai'   ? '<span class="check-tag tag-ai">🤖AI</span>' : ''}
+              </div>
+              <div class="check-desc">${item.desc}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    area.appendChild(sec);
+  });
+
+  updateScore();
+}
+
+function toggle(id) {
+  state[id] = !state[id];
+
+  // DOM直接更新（再描画なし）
+  const el = document.querySelector(`[data-id="${id}"]`);
+  if (el) {
+    el.classList.toggle('checked', state[id]);
+    el.querySelector('.checkbox').textContent = state[id] ? '✓' : '';
+    el.classList.add('pulse');
+    setTimeout(() => el.classList.remove('pulse'), 400);
+  }
+
+  // カテゴリカウント更新
+  updateCategoryCounts();
+  updateScore();
+}
+
+function updateCategoryCounts() {
+  CATEGORIES.forEach((cat, ci) => {
+    const checked = cat.items.filter(i => state[i.id]).length;
+    const headers = document.querySelectorAll('.category-count');
+    if (headers[ci]) headers[ci].textContent = `${checked}/${cat.items.length}`;
+  });
+}
+
+function updateScore() {
+  const allItems = CATEGORIES.flatMap(c => c.items);
+  const mustItems = allItems.filter(i => i.tag === 'must');
+  const total = allItems.length;
+  const checked = allItems.filter(i => state[i.id]).length;
+  const mustChecked = mustItems.filter(i => state[i.id]).length;
+  const mustTotal = mustItems.length;
+  const ratio = total > 0 ? checked / total : 0;
+
+  // スコア表示
+  const scoreEl = document.getElementById('scoreNum');
+  const oldScore = parseInt(scoreEl.textContent) || 0;
+  animateNumber(scoreEl, oldScore, checked);
+  document.getElementById('totalNum').textContent = total;
+
+  // プログレス
+  document.getElementById('progressFill').style.width = `${ratio * 100}%`;
+  document.getElementById('progressText').textContent = `${checked} / ${total}`;
+
+  // 判定
+  const verdictEl = document.getElementById('verdictBox');
+  const descEl = document.getElementById('verdictDesc');
+
+  verdictEl.className = 'verdict';
+
+  if (checked === 0) {
+    verdictEl.classList.add('wait');
+    verdictEl.textContent = '— 判定待ち —';
+    descEl.textContent = 'チェックを入れると判定が更新されます';
+  } else if (mustChecked < mustTotal) {
+    verdictEl.classList.add('caution');
+    verdictEl.textContent = '⚠ MUST項目未達';
+    descEl.textContent = `★MUST項目があと${mustTotal - mustChecked}個未チェックです`;
+  } else if (ratio >= 0.85) {
+    verdictEl.classList.add('strong');
+    verdictEl.textContent = '🚀 強いエントリーOK';
+    descEl.textContent = '条件が高水準で揃っています！自信を持ってエントリーを。';
+  } else if (ratio >= 0.65) {
+    verdictEl.classList.add('go');
+    verdictEl.textContent = '✅ エントリー可';
+    descEl.textContent = 'MUST項目クリア。残りも確認しながら進めましょう。';
+  } else {
+    verdictEl.classList.add('caution');
+    verdictEl.textContent = '⏳ もう少し確認を';
+    descEl.textContent = '確認項目が不足しています。急がず環境整備を優先しましょう。';
+  }
+}
+
+function animateNumber(el, from, to) {
+  const diff = to - from;
+  if (diff === 0) return;
+  const steps = 12;
+  let step = 0;
+  const timer = setInterval(() => {
+    step++;
+    el.textContent = Math.round(from + diff * (step / steps));
+    if (step >= steps) clearInterval(timer);
+  }, 20);
+}
+
+function resetAll() {
+  Object.keys(state).forEach(k => state[k] = false);
+  render();
+  showToast('リセットしました');
+}
+
+function copyResult() {
+  const allItems = CATEGORIES.flatMap(c => c.items);
+  const checked = allItems.filter(i => state[i.id]).length;
+  const total = allItems.length;
+  const ratio = Math.round(checked / total * 100);
+
+  let text = `【AI×スイングトレード エントリー判定】\n`;
+  text += `チェック率: ${checked}/${total}（${ratio}%）\n\n`;
+
+  CATEGORIES.forEach(cat => {
+    const catChecked = cat.items.filter(i => state[i.id]);
+    if (catChecked.length > 0) {
+      text += `${cat.icon} ${cat.title}\n`;
+      catChecked.forEach(i => { text += `  ✓ ${i.title}\n`; });
+      text += '\n';
+    }
+  });
+
+  text += `ずみ（@shota_dxfactory）のチェックリストより`;
+
+  navigator.clipboard.writeText(text).then(() => showToast('結果をコピーしました！'));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// 初期描画
+render();
+</script>
+</body>
+</html>
